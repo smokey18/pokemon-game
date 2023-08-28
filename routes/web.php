@@ -14,5 +14,9 @@ use Illuminate\Support\Facades\Route;
 */
 
 Route::get('/', function () {
-    return view('welcome');
-});
+    return redirect(route('battle'));
+})->name('index');
+
+Route::get('/battle', function () {
+    return view('battle');
+})->name('battle');
