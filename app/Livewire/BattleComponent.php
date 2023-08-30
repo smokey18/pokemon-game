@@ -2,8 +2,8 @@
 
 namespace App\Livewire;
 
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Http;
+use App\Services\DamageCalculatorService;
+use App\Services\PokemonService;
 use Livewire\Component;
 
 class BattleComponent extends Component
@@ -17,6 +17,16 @@ class BattleComponent extends Component
     public $opponentHealth = 100;
     public $battleLog = [];
 
+    // Services
+    protected $pokemonService;
+    protected $damageService;
+
+    public function __construct()
+    {
+        $this->pokemonService = new PokemonService();
+        $this->damageService = new DamageCalculatorService();
+    }
+
     public function mount()
     {
         $this->refreshPokemon();
@@ -28,39 +38,11 @@ class BattleComponent extends Component
         $this->playerHealth = $this->opponentHealth = 100;
         $this->selectedMove = null;
 
-        $this->playerPokemon = $this->getPokemon();
-        $this->opponentPokemon = $this->getPokemon();
+        $this->playerPokemon = $this->pokemonService->getPokemon(rand(1, 800));
+        $this->opponentPokemon = $this->pokemonService->getPokemon(rand(1, 800));
 
         $this->playerMoves = collect($this->playerPokemon['moves'])->random(3);
         $this->opponentMoves = collect($this->opponentPokemon['moves'])->random(3);
-    }
-
-    public function getPokemon()
-    {
-        $randomKey = rand(1, 800);
-        return Cache::remember($randomKey, now()->addHour(), function () use ($randomKey) {
-            return Http::get("https://pokeapi.co/api/v2/pokemon/{$randomKey}")->json();
-        });
-    }
-
-    public function calculateDamage($movePower, $attackerLevel, $attackerStat, $defenderStat, $typeMultiplier)
-    {
-        $critical = 1;
-
-        $damage = (
-            (
-                (
-                    (2 * $attackerLevel / 5 + 2) *
-                    $movePower *
-                    $attackerStat / $defenderStat
-                ) / 50 + 2
-            ) *
-            $critical *
-            $typeMultiplier *
-            rand(217, 255) / 255
-        );
-
-        return floor($damage);
     }
 
     public function attack()
@@ -78,8 +60,8 @@ class BattleComponent extends Component
             return;
         }
 
-        $playerMove = $this->getMoveDetails($this->selectedMove);
-        $playerDamage = $this->calculateDamage(
+        $playerMove = $this->pokemonService->getMoveDetails($this->selectedMove);
+        $playerDamage = $this->damageService->calculateDamage(
             $playerMove['power'],
             $this->playerHealth,
             $this->playerPokemon['stats'][1]['base_stat'],
@@ -87,8 +69,8 @@ class BattleComponent extends Component
             1
         );
 
-        $opponentMoveDetails = $this->getMoveDetails(collect($this->opponentPokemon['moves'])->random()['move']['name']);
-        $opponentDamage = $this->calculateDamage(
+        $opponentMoveDetails = $this->pokemonService->getMoveDetails(collect($this->opponentPokemon['moves'])->random()['move']['name']);
+        $opponentDamage = $this->damageService->calculateDamage(
             $opponentMoveDetails['power'],
             $this->opponentHealth,
             $this->opponentPokemon['stats'][1]['base_stat'],
@@ -105,12 +87,6 @@ class BattleComponent extends Component
         if ($this->playerHealth <= 0 || $this->opponentHealth <= 0) {
             $this->battleLog[] = $this->playerHealth <= 0 ? "You fainted. Opponent wins!" : "Opponent fainted. You win!";
         }
-    }
-
-    public function getMoveDetails($moveName)
-    {
-        $response = Http::get("https://pokeapi.co/api/v2/move/{$moveName}");
-        return $response->successful() ? $response->json() : null;
     }
 
     public function render()
